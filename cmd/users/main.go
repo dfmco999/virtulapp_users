@@ -20,6 +20,7 @@ type server struct {
 }
 
 func (s *server) GetUser(ctx context.Context, req *usersv1.GetUserRequest) (*usersv1.GetUserResponse, error) {
+	print("Usuario", "Busca el usuario")
 	row := s.db.QueryRowContext(ctx, `select id, email, tenant_id from users where id=$1`, req.UserId)
 	var id, email, tid string
 	if err := row.Scan(&id, &email, &tid); err != nil {
@@ -29,7 +30,7 @@ func (s *server) GetUser(ctx context.Context, req *usersv1.GetUserRequest) (*use
 }
 
 func main() {
-	grpcAddr := getenv("GRPC_ADDR", "0.0.0.0:50051")
+	grpcAddr := getenv("GRPC_ADDR", "151.101.2.15:50051")
 
 	pub, err := auth.LoadRSAPublicKeyFromEnvOrFile(getenv("IAT_PUBLIC_KEY_PEM", ""))
 	must(err)
