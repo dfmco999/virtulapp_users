@@ -2,16 +2,15 @@
     FROM golang:1.24 AS build
     WORKDIR /app
     
-    # 1. Copiamos TODO el contexto (incluyendo la carpeta vendor y archivos .mod)
+    # Argumentos que Railway pasará durante el build
+    ARG GITHUB_TOKEN
+    ENV GOPRIVATE=github.com/dfmco999/*
+    
+    # Configurar Git para usar el token en lugar de pedir contraseña
+    RUN git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+    
+    COPY go.mod go.sum ./
+    RUN go mod download
+    
     COPY . .
-    
-    # 2. Eliminamos "go mod download" porque ya tenemos todo en /vendor
-    # 3. Compilamos usando el flag -mod=vendor
-    RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-        go build -mod=vendor -o /bin/users ./cmd/users
-    
-    # --- runtime stage ---
-    FROM gcr.io/distroless/static:nonroot
-    COPY --from=build /bin/users /users
-    USER nonroot:nonroot
-    ENTRYPOINT ["/users"]
+    RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /bin/users ./cmd/users
