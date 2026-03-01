@@ -12,5 +12,12 @@
     COPY go.mod go.sum ./
     RUN go mod download
     
+    # Informamos a Docker/Railway que el contenedor escucha en el 8080
+EXPOSE 443
+
+# Forzamos que, si no hay variable de entorno, use el 8080
+ENV PORT=443
+ENV HTTP_ADDR=:443
+
     COPY . .
     RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /bin/users ./cmd/users
