@@ -30,7 +30,7 @@ func (s *server) GetUser(ctx context.Context, req *usersv1.GetUserRequest) (*use
 }
 
 func main() {
-	grpcAddr := getenv("GRPC_ADDR", "0.0.0.0:50051")
+	grpcAddr := getenv("GRPC_ADDR", "0.0.0.0:443")
 
 	pub, err := auth.LoadRSAPublicKeyFromEnvOrFile(getenv("IAT_PUBLIC_KEY_PEM", ""))
 	must(err)
