@@ -36,7 +36,7 @@ MODELOS GORM
 
 type User struct {
 	ID                string  `gorm:"type:uuid;primaryKey"`
-	ExternalID        *string `gorm:"index:users_external_id_key,unique"`
+	ExternalID        *string `gorm:"size:100;uniqueIndex"`
 	Username          string  `gorm:"size:50;not null;uniqueIndex"`
 	Email             string  `gorm:"size:255;not null;uniqueIndex"`
 	EmailNormalized   string  `gorm:"size:255;not null;uniqueIndex"`
@@ -896,18 +896,18 @@ func main() {
 		log.Fatalf("gorm open: %v", err)
 	}
 
-	//	if err := db.AutoMigrate(
-	//		&User{},
-	//		&Credentials{},
-	//		&UserProfile{},
-	//		&UserPreference{},
-	//		&PasswordEntry{},
-	//		&UserAuditLog{},
-	//		&UserSession{},
-	//	); err != nil {
-	//		log.Fatalf("automigrate: %v", err)
-	//	}
-
+	/*	if err := db.AutoMigrate(
+			&User{},
+			&Credentials{},
+			&UserProfile{},
+			&UserPreference{},
+			&PasswordEntry{},
+			&UserAuditLog{},
+			&UserSession{},
+		); err != nil {
+			log.Fatalf("automigrate: %v", err)
+		}
+	*/
 	rdb := redis.NewClient(&redis.Options{
 		Addr: os.Getenv("REDIS_ADDR"),
 	})
