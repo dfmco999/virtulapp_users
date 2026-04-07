@@ -35,14 +35,14 @@ MODELOS GORM
 */
 
 type User struct {
-	ID                string  `gorm:"type:uuid;primaryKey"`
-	ExternalID        *string `gorm:"size:100;uniqueIndex"`
-	Username          string  `gorm:"size:50;not null;uniqueIndex"`
-	Email             string  `gorm:"size:255;not null;uniqueIndex"`
-	EmailNormalized   string  `gorm:"size:255;not null;uniqueIndex"`
-	Status            string  `gorm:"size:20;not null;default:ACTIVE"`
-	IsEmailVerified   bool    `gorm:"not null;default:false"`
-	IsPhoneVerified   bool    `gorm:"not null;default:false"`
+	ID                string `gorm:"type:uuid;primaryKey"`
+	ExternalID        string `gorm:"index:users_external_id_key,unique"`
+	Username          string `gorm:"size:50;not null;uniqueIndex"`
+	Email             string `gorm:"size:255;not null;uniqueIndex"`
+	EmailNormalized   string `gorm:"size:255;not null;uniqueIndex"`
+	Status            string `gorm:"size:20;not null;default:ACTIVE"`
+	IsEmailVerified   bool   `gorm:"not null;default:false"`
+	IsPhoneVerified   bool   `gorm:"not null;default:false"`
 	LastLoginAt       *time.Time
 	PasswordChangedAt *time.Time
 	CreatedAt         time.Time
