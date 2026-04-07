@@ -896,18 +896,6 @@ func main() {
 		log.Fatalf("gorm open: %v", err)
 	}
 
-	if err := db.AutoMigrate(
-		&User{},
-		&Credentials{},
-		&UserProfile{},
-		&UserPreference{},
-		&PasswordEntry{},
-		&UserAuditLog{},
-		&UserSession{},
-	); err != nil {
-		log.Fatalf("automigrate: %v", err)
-	}
-
 	rdb := redis.NewClient(&redis.Options{
 		Addr: os.Getenv("REDIS_ADDR"),
 	})
