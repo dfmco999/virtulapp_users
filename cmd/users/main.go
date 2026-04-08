@@ -35,110 +35,110 @@ MODELOS GORM
 */
 
 type User struct {
-	ID                string  `gorm:"type:uuid;primaryKey"`
-	ExternalID        *string `gorm:"size:100;uniqueIndex"`
-	Username          string  `gorm:"size:50;not null;uniqueIndex"`
-	Email             string  `gorm:"size:255;not null;uniqueIndex"`
-	EmailNormalized   string  `gorm:"size:255;not null;uniqueIndex"`
-	Status            string  `gorm:"size:20;not null;default:ACTIVE"`
-	IsEmailVerified   bool    `gorm:"not null;default:false"`
-	IsPhoneVerified   bool    `gorm:"not null;default:false"`
-	LastLoginAt       *time.Time
-	PasswordChangedAt *time.Time
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-	DeletedAt         gorm.DeletedAt `gorm:"index"`
+	ID                string         `gorm:"column:id;type:uuid;primaryKey"`
+	ExternalID        *string        `gorm:"column:external_id"`
+	Username          string         `gorm:"column:username;size:50;not null"`
+	Email             string         `gorm:"column:email;size:255;not null"`
+	EmailNormalized   string         `gorm:"column:email_normalized;size:255;not null"`
+	Status            string         `gorm:"column:status;size:20;not null;default:ACTIVE"`
+	IsEmailVerified   bool           `gorm:"column:is_email_verified;not null;default:false"`
+	IsPhoneVerified   bool           `gorm:"column:is_phone_verified;not null;default:false"`
+	LastLoginAt       *time.Time     `gorm:"column:last_login_at"`
+	PasswordChangedAt *time.Time     `gorm:"column:password_changed_at"`
+	CreatedAt         time.Time      `gorm:"column:created_at"`
+	UpdatedAt         time.Time      `gorm:"column:updated_at"`
+	DeletedAt         gorm.DeletedAt `gorm:"column:deleted_at;index"`
 
-	Credentials Credentials     `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
-	Profile     UserProfile     `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
-	Preferences UserPreference  `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
-	Sessions    []UserSession   `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
-	AuditLogs   []UserAuditLog  `gorm:"foreignKey:UserID"`
-	PassHistory []PasswordEntry `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
+	Credentials Credentials     `gorm:"foreignKey:UserID;references:ID"`
+	Profile     UserProfile     `gorm:"foreignKey:UserID;references:ID"`
+	Preferences UserPreference  `gorm:"foreignKey:UserID;references:ID"`
+	Sessions    []UserSession   `gorm:"foreignKey:UserID;references:ID"`
+	AuditLogs   []UserAuditLog  `gorm:"foreignKey:UserID;references:ID"`
+	PassHistory []PasswordEntry `gorm:"foreignKey:UserID;references:ID"`
 }
 
 func (User) TableName() string { return "users" }
 
 type Credentials struct {
-	UserID             string `gorm:"type:uuid;primaryKey"`
-	PasswordHash       string `gorm:"type:text;not null"`
-	FailedLoginCount   int32  `gorm:"not null;default:0"`
-	LockedUntil        *time.Time
-	LastFailedLoginAt  *time.Time
-	LastFailedLoginIP  *string `gorm:"type:inet"`
-	LastSuccessLoginIP *string `gorm:"type:inet"`
-	MustChangePassword bool    `gorm:"not null;default:false"`
-	PasswordExpiresAt  *time.Time
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	UserID             string     `gorm:"column:user_id;type:uuid;primaryKey"`
+	PasswordHash       string     `gorm:"column:password_hash;type:text;not null"`
+	FailedLoginCount   int32      `gorm:"column:failed_login_count;not null;default:0"`
+	LockedUntil        *time.Time `gorm:"column:locked_until"`
+	LastFailedLoginAt  *time.Time `gorm:"column:last_failed_login_at"`
+	LastFailedLoginIP  *string    `gorm:"column:last_failed_login_ip;type:inet"`
+	LastSuccessLoginIP *string    `gorm:"column:last_success_login_ip;type:inet"`
+	MustChangePassword bool       `gorm:"column:must_change_password;not null;default:false"`
+	PasswordExpiresAt  *time.Time `gorm:"column:password_expires_at"`
+	CreatedAt          time.Time  `gorm:"column:created_at"`
+	UpdatedAt          time.Time  `gorm:"column:updated_at"`
 }
 
 func (Credentials) TableName() string { return "user_credentials" }
 
 type UserProfile struct {
-	UserID      string `gorm:"type:uuid;primaryKey"`
-	FirstName   *string
-	LastName    *string
-	FullName    *string
-	PhoneNumber *string `gorm:"size:20"`
-	AvatarURL   *string
-	Locale      string `gorm:"size:10;not null;default:es-CO"`
-	Timezone    string `gorm:"size:50;not null;default:America/Bogota"`
-	Bio         *string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	UserID      string    `gorm:"column:user_id;type:uuid;primaryKey"`
+	FirstName   *string   `gorm:"column:first_name"`
+	LastName    *string   `gorm:"column:last_name"`
+	FullName    *string   `gorm:"column:full_name"`
+	PhoneNumber *string   `gorm:"column:phone_number;size:20"`
+	AvatarURL   *string   `gorm:"column:avatar_url"`
+	Locale      string    `gorm:"column:locale;size:10;not null;default:es-CO"`
+	Timezone    string    `gorm:"column:timezone;size:50;not null;default:America/Bogota"`
+	Bio         *string   `gorm:"column:bio"`
+	CreatedAt   time.Time `gorm:"column:created_at"`
+	UpdatedAt   time.Time `gorm:"column:updated_at"`
 }
 
 func (UserProfile) TableName() string { return "user_profiles" }
 
 type UserPreference struct {
-	UserID             string `gorm:"type:uuid;primaryKey"`
-	Theme              string `gorm:"size:20;not null;default:system"`
-	Language           string `gorm:"size:10;not null;default:es"`
-	EmailNotifications bool   `gorm:"not null;default:true"`
-	SMSNotifications   bool   `gorm:"not null;default:false"`
-	PushNotifications  bool   `gorm:"not null;default:true"`
-	MarketingOptIn     bool   `gorm:"not null;default:false"`
-	Metadata           string `gorm:"type:jsonb;not null;default:'{}'"`
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	UserID             string    `gorm:"column:user_id;type:uuid;primaryKey"`
+	Theme              string    `gorm:"column:theme;size:20;not null;default:system"`
+	Language           string    `gorm:"column:language;size:10;not null;default:es"`
+	EmailNotifications bool      `gorm:"column:email_notifications;not null;default:true"`
+	SMSNotifications   bool      `gorm:"column:sms_notifications;not null;default:false"`
+	PushNotifications  bool      `gorm:"column:push_notifications;not null;default:true"`
+	MarketingOptIn     bool      `gorm:"column:marketing_opt_in;not null;default:false"`
+	Metadata           string    `gorm:"column:metadata;type:jsonb;not null;default:'{}'"`
+	CreatedAt          time.Time `gorm:"column:created_at"`
+	UpdatedAt          time.Time `gorm:"column:updated_at"`
 }
 
 func (UserPreference) TableName() string { return "user_preferences" }
 
 type PasswordEntry struct {
-	ID           string `gorm:"type:uuid;primaryKey"`
-	UserID       string `gorm:"type:uuid;index;not null"`
-	PasswordHash string `gorm:"type:text;not null"`
-	CreatedAt    time.Time
+	ID           string    `gorm:"column:id;type:uuid;primaryKey"`
+	UserID       string    `gorm:"column:user_id;type:uuid;index;not null"`
+	PasswordHash string    `gorm:"column:password_hash;type:text;not null"`
+	CreatedAt    time.Time `gorm:"column:created_at"`
 }
 
 func (PasswordEntry) TableName() string { return "user_password_history" }
 
 type UserAuditLog struct {
-	ID          string  `gorm:"type:uuid;primaryKey"`
-	UserID      *string `gorm:"type:uuid;index"`
-	EventType   string  `gorm:"size:50;not null;index"`
-	EventResult string  `gorm:"size:20;not null"`
-	IPAddress   *string `gorm:"type:inet"`
-	ActorUserID *string `gorm:"type:uuid"`
-	Details     string  `gorm:"type:jsonb;not null;default:'{}'"`
-	CreatedAt   time.Time
+	ID          string    `gorm:"column:id;type:uuid;primaryKey"`
+	UserID      *string   `gorm:"column:user_id;type:uuid;index"`
+	EventType   string    `gorm:"column:event_type;size:50;not null;index"`
+	EventResult string    `gorm:"column:event_result;size:20;not null"`
+	IPAddress   *string   `gorm:"column:ip_address;type:inet"`
+	ActorUserID *string   `gorm:"column:actor_user_id;type:uuid"`
+	Details     string    `gorm:"column:details;type:jsonb;not null;default:'{}'"`
+	CreatedAt   time.Time `gorm:"column:created_at"`
 }
 
 func (UserAuditLog) TableName() string { return "user_audit_logs" }
 
 type UserSession struct {
-	ID               string `gorm:"type:uuid;primaryKey"`
-	UserID           string `gorm:"type:uuid;index;not null"`
-	RefreshTokenHash string `gorm:"type:text;not null"`
-	DeviceInfo       *string
-	IPAddress        *string `gorm:"type:inet"`
-	UserAgent        *string
-	ExpiresAt        time.Time  `gorm:"not null;index"`
-	RevokedAt        *time.Time `gorm:"index"`
-	LastUsedAt       *time.Time
-	CreatedAt        time.Time
+	ID               string     `gorm:"column:id;type:uuid;primaryKey"`
+	UserID           string     `gorm:"column:user_id;type:uuid;index;not null"`
+	RefreshTokenHash string     `gorm:"column:refresh_token_hash;type:text;not null"`
+	DeviceInfo       *string    `gorm:"column:device_info"`
+	IPAddress        *string    `gorm:"column:ip_address;type:inet"`
+	UserAgent        *string    `gorm:"column:user_agent"`
+	ExpiresAt        time.Time  `gorm:"column:expires_at;not null;index"`
+	RevokedAt        *time.Time `gorm:"column:revoked_at;index"`
+	LastUsedAt       *time.Time `gorm:"column:last_used_at"`
+	CreatedAt        time.Time  `gorm:"column:created_at"`
 }
 
 func (UserSession) TableName() string { return "user_sessions" }
@@ -459,11 +459,6 @@ func (s *server) DeleteUser(ctx context.Context, req *usersv1.DeleteUserRequest)
 	return &usersv1.DeleteUserResponse{}, nil
 }
 
-/*
-LOGIN
-Asume que existe LoginRequest y LoginResponse en tu proto.
-*/
-
 func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1.LoginResponse, error) {
 	if req.GetEmail() == "" {
 		return nil, status.Error(codes.InvalidArgument, "email required")
@@ -477,25 +472,39 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 
 	var user User
 	err := s.db.WithContext(ctx).
-		Preload("Credentials").
 		Preload("Profile").
 		Preload("Preferences").
 		First(&user, "email_normalized = ?", emailNormalized).Error
 	if err != nil {
-		return nil, status.Error(codes.NotFound, "user not found")
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if user.Status == "DELETED" || user.Status == "SUSPENDED" || user.Status == "INACTIVE" {
+	var cred Credentials
+	err = s.db.WithContext(ctx).
+		First(&cred, "user_id = ?", user.ID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			_ = s.createAudit(ctx, &user.ID, "LOGIN_FAILED", "FAIL", `{"reason":"credentials_not_found"}`)
+			return nil, status.Error(codes.Unauthenticated, "invalid credentials")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	user.Credentials = cred
+
+	if user.Status == "DELETED" || user.Status == "SUSPENDED" || user.Status == "INACTIVE" || user.Status == "LOCKED" {
 		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"status_blocked"}`)
 		return nil, status.Error(codes.PermissionDenied, "account unavailable")
 	}
 
-	if user.Credentials.LockedUntil != nil && user.Credentials.LockedUntil.After(now) {
+	if cred.LockedUntil != nil && cred.LockedUntil.After(now) {
 		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"locked"}`)
 		return nil, status.Error(codes.PermissionDenied, "account locked")
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Credentials.PasswordHash), []byte(req.GetPassword())); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(req.GetPassword())); err != nil {
 		lockValues := map[string]any{
 			"failed_login_count":   gorm.Expr("failed_login_count + 1"),
 			"last_failed_login_at": now,
@@ -510,9 +519,9 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 			log.Printf("update failed login count: %v", err2)
 		}
 
-		var cred Credentials
-		if err2 := s.db.WithContext(ctx).First(&cred, "user_id = ?", user.ID).Error; err2 == nil {
-			if cred.FailedLoginCount >= 4 {
+		var updatedCred Credentials
+		if err2 := s.db.WithContext(ctx).First(&updatedCred, "user_id = ?", user.ID).Error; err2 == nil {
+			if updatedCred.FailedLoginCount >= 4 {
 				lockedUntil := now.Add(15 * time.Minute)
 				_ = s.db.WithContext(ctx).Model(&Credentials{}).
 					Where("user_id = ?", user.ID).
@@ -592,17 +601,10 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 	}
 
 	return &usersv1.LoginResponse{
-		User: updated,
-		// Aquí normalmente devolverías access_token y refresh_token reales,
-		// emitidos por tu capa de auth/JWT.
-		MustChangePassword: user.Credentials.MustChangePassword,
+		User:               updated,
+		MustChangePassword: cred.MustChangePassword,
 	}, nil
 }
-
-/*
-CHANGE PASSWORD
-Asume que existe ChangePasswordRequest y ChangePasswordResponse.
-*/
 
 func (s *server) ChangePassword(ctx context.Context, req *usersv1.ChangePasswordRequest) (*usersv1.ChangePasswordResponse, error) {
 	if req.GetUserId() == "" {
@@ -617,7 +619,6 @@ func (s *server) ChangePassword(ctx context.Context, req *usersv1.ChangePassword
 
 	var user User
 	err := s.db.WithContext(ctx).
-		Preload("Credentials").
 		First(&user, "id = ?", req.GetUserId()).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -626,7 +627,17 @@ func (s *server) ChangePassword(ctx context.Context, req *usersv1.ChangePassword
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Credentials.PasswordHash), []byte(req.GetCurrentPassword())); err != nil {
+	var cred Credentials
+	err = s.db.WithContext(ctx).
+		First(&cred, "user_id = ?", user.ID).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Error(codes.NotFound, "credentials not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(req.GetCurrentPassword())); err != nil {
 		_ = s.createAudit(ctx, &user.ID, "PASSWORD_CHANGE_FAILED", "FAIL", `{"reason":"invalid_current_password"}`)
 		return nil, status.Error(codes.Unauthenticated, "invalid current password")
 	}
