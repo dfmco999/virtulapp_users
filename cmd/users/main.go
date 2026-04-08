@@ -503,7 +503,11 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"locked"}`)
 		return nil, status.Error(codes.PermissionDenied, "account locked")
 	}
-
+	/*	log.Println("HASH:", cred.PasswordHash)
+		passwordHash, err := hashPassword(req.GetPassword())
+		log.Println("PASS:", req.GetPassword())
+		log.Println("PASSENCRYPT:", passwordHash)
+	*/
 	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(req.GetPassword())); err != nil {
 		lockValues := map[string]any{
 			"failed_login_count":   gorm.Expr("failed_login_count + 1"),
