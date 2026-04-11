@@ -538,6 +538,15 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
 	}
 
+	activeSession, err := s.hasActiveSession(ctx, user.ID, now)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if activeSession {
+		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"active_session_exists"}`)
+		return nil, status.Error(codes.PermissionDenied, "user already has an active session")
+	}
+
 	refreshHash := hashToken(uuid.NewString())
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -840,6 +849,18 @@ func (s *server) createAudit(ctx context.Context, userID *string, eventType, res
 		CreatedAt:   time.Now().UTC(),
 	}
 	return s.db.WithContext(ctx).Create(&audit).Error
+}
+
+func (s *server) hasActiveSession(ctx context.Context, userID string, now time.Time) (bool, error) {
+	var count int64
+	err := s.db.WithContext(ctx).
+		Model(&UserSession{}).
+		Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, now).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
 func hashPassword(password string) (string, error) {
