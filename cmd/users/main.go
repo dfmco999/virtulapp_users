@@ -779,27 +779,42 @@ func toProtoUser(u *User) *usersv1.User {
 
 func (s *server) cacheUser(ctx context.Context, u *usersv1.User) {
 	if s.redis == nil || u == nil {
+		if u != nil {
+			log.Printf("redis cache skipped for user=%s: redis unavailable", u.UserId)
+		}
 		return
 	}
 	b, err := json.Marshal(u)
 	if err != nil {
+		log.Printf("redis cache marshal failed for user=%s: %v", u.UserId, err)
 		return
 	}
-	_ = s.redis.Set(ctx, "users:"+u.UserId, b, userCacheTTL).Err()
+	key := "users:" + u.UserId
+	if err := s.redis.Set(ctx, key, b, userCacheTTL).Err(); err != nil {
+		log.Printf("redis cache set failed for key=%s: %v", key, err)
+		return
+	}
+	log.Printf("redis cache set ok for key=%s ttl=%s", key, userCacheTTL)
 }
 
 func (s *server) getCachedUser(ctx context.Context, id string) (*usersv1.User, bool) {
 	if s.redis == nil || id == "" {
 		return nil, false
 	}
-	val, err := s.redis.Get(ctx, "users:"+id).Result()
+	key := "users:" + id
+	val, err := s.redis.Get(ctx, key).Result()
 	if err != nil {
+		if !errors.Is(err, redis.Nil) {
+			log.Printf("redis cache get failed for key=%s: %v", key, err)
+		}
 		return nil, false
 	}
 	var u usersv1.User
 	if err := json.Unmarshal([]byte(val), &u); err != nil {
+		log.Printf("redis cache unmarshal failed for key=%s: %v", key, err)
 		return nil, false
 	}
+	log.Printf("redis cache hit for key=%s", key)
 	return &u, true
 }
 
@@ -807,7 +822,12 @@ func (s *server) invalidateUserCache(ctx context.Context, id string) {
 	if s.redis == nil || id == "" {
 		return
 	}
-	_ = s.redis.Del(ctx, "users:"+id).Err()
+	key := "users:" + id
+	if err := s.redis.Del(ctx, key).Err(); err != nil {
+		log.Printf("redis cache delete failed for key=%s: %v", key, err)
+		return
+	}
+	log.Printf("redis cache delete ok for key=%s", key)
 }
 
 func (s *server) createAudit(ctx context.Context, userID *string, eventType, result, details string) error {
