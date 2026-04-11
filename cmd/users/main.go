@@ -911,9 +911,7 @@ func main() {
 		log.Fatalf("gorm open: %v", err)
 	}
 
-	rdb := redis.NewClient(&redis.Options{
-		Addr: os.Getenv("REDIS_ADDR"),
-	})
+	rdb := newRedisClient()
 
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
@@ -930,4 +928,41 @@ func main() {
 	if err := srv.Serve(lis); err != nil {
 		log.Fatalf("grpc serve: %v", err)
 	}
+}
+
+func newRedisClient() *redis.Client {
+	if redisURL := strings.TrimSpace(os.Getenv("REDIS_URL")); redisURL != "" {
+		opt, err := redis.ParseURL(redisURL)
+		if err != nil {
+			log.Printf("redis disabled: invalid REDIS_URL: %v", err)
+			return nil
+		}
+
+		rdb := redis.NewClient(opt)
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			log.Printf("redis disabled: ping failed for REDIS_URL: %v", err)
+			_ = rdb.Close()
+			return nil
+		}
+		log.Println("redis cache enabled via REDIS_URL")
+		return rdb
+	}
+
+	if redisAddr := strings.TrimSpace(os.Getenv("REDIS_ADDR")); redisAddr != "" {
+		rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			log.Printf("redis disabled: ping failed for REDIS_ADDR=%q: %v", redisAddr, err)
+			_ = rdb.Close()
+			return nil
+		}
+		log.Printf("redis cache enabled via REDIS_ADDR=%q", redisAddr)
+		return rdb
+	}
+
+	log.Println("redis disabled: REDIS_URL/REDIS_ADDR not configured")
+	return nil
 }
