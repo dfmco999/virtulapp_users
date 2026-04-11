@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"encoding/hex"
 	"errors"
 	"log"
 	"net"
@@ -503,10 +505,6 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"locked"}`)
 		return nil, status.Error(codes.PermissionDenied, "account locked")
 	}
-	log.Println("HASH:", cred.PasswordHash)
-	passwordHash, err := hashPassword(req.GetPassword())
-	log.Println("PASS:", req.GetPassword())
-	log.Println("PASSENCRYPT:", passwordHash)
 
 	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(req.GetPassword())); err != nil {
 		lockValues := map[string]any{
@@ -540,10 +538,7 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
 	}
 
-	refreshHash, err := hashPassword(uuid.NewString())
-	if err != nil {
-		return nil, status.Error(codes.Internal, "unable to generate session")
-	}
+	refreshHash := hashToken(uuid.NewString())
 
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&Credentials{}).
@@ -833,6 +828,11 @@ func hashPassword(password string) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+func hashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
 
 func normalizeEmail(s string) string {
