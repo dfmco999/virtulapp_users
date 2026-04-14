@@ -614,6 +614,52 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 	}, nil
 }
 
+func (s *server) Logout(ctx context.Context, req *usersv1.LogoutRequest) (*usersv1.LogoutResponse, error) {
+	if req.GetUserId() == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id required")
+	}
+
+	now := time.Now().UTC()
+
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var user User
+		if err := tx.First(&user, "id = ?", req.GetUserId()).Error; err != nil {
+			return err
+		}
+
+		update := tx.Model(&UserSession{}).
+			Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", req.GetUserId(), now).
+			Update("revoked_at", now)
+		if update.Error != nil {
+			return update.Error
+		}
+
+		audit := UserAuditLog{
+			ID:          uuid.NewString(),
+			UserID:      ptr(req.GetUserId()),
+			EventType:   "LOGOUT",
+			EventResult: "SUCCESS",
+			IPAddress:   nilIfEmpty(req.GetIpAddress()),
+			Details:     buildLogoutAuditDetails(update.RowsAffected > 0, req.GetUserAgent()),
+			CreatedAt:   now,
+		}
+		if err := tx.Create(&audit).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, status.Error(codes.NotFound, "user not found")
+		}
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	s.invalidateUserCache(ctx, req.GetUserId())
+	return &usersv1.LogoutResponse{}, nil
+}
+
 func (s *server) ChangePassword(ctx context.Context, req *usersv1.ChangePasswordRequest) (*usersv1.ChangePasswordResponse, error) {
 	if req.GetUserId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id required")
@@ -915,6 +961,22 @@ func buildFullName(first, last string) *string {
 		return nil
 	}
 	return &full
+}
+
+func buildLogoutAuditDetails(sessionRevoked bool, userAgent string) string {
+	payload := map[string]any{
+		"source":          "grpc",
+		"session_revoked": sessionRevoked,
+	}
+	if trimmed := strings.TrimSpace(userAgent); trimmed != "" {
+		payload["user_agent"] = trimmed
+	}
+
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return `{"source":"grpc","session_revoked":false}`
+	}
+	return string(b)
 }
 
 func ptr[T any](v T) *T {
