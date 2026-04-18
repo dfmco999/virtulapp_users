@@ -554,13 +554,19 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
 	}
 
-	activeSession, err := s.hasActiveSession(ctx, user.ID, now)
+	activeSession, err := s.findActiveSession(ctx, user.ID, now)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if activeSession {
-		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"active_session_exists"}`)
-		return nil, status.Error(codes.PermissionDenied, "user already has an active session")
+	if activeSession != nil {
+		if !sameSessionFingerprint(activeSession, req.GetIpAddress(), req.GetUserAgent()) {
+			_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"active_session_exists"}`)
+			return nil, status.Error(codes.PermissionDenied, "user already has an active session")
+		}
+
+		if err := s.revokeSession(ctx, activeSession.ID, now); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 
 	refreshHash := hashToken(uuid.NewString())
@@ -913,16 +919,27 @@ func (s *server) createAudit(ctx context.Context, userID *string, eventType, res
 	return s.db.WithContext(ctx).Create(&audit).Error
 }
 
-func (s *server) hasActiveSession(ctx context.Context, userID string, now time.Time) (bool, error) {
-	var count int64
+func (s *server) findActiveSession(ctx context.Context, userID string, now time.Time) (*UserSession, error) {
+	var session UserSession
 	err := s.db.WithContext(ctx).
 		Model(&UserSession{}).
 		Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, now).
-		Count(&count).Error
+		Order("created_at DESC").
+		First(&session).Error
 	if err != nil {
-		return false, err
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	return count > 0, nil
+	return &session, nil
+}
+
+func (s *server) revokeSession(ctx context.Context, sessionID string, now time.Time) error {
+	return s.db.WithContext(ctx).
+		Model(&UserSession{}).
+		Where("id = ? AND revoked_at IS NULL", sessionID).
+		Update("revoked_at", now).Error
 }
 
 func (s *server) clearExpiredLock(ctx context.Context, userID string) error {
@@ -944,6 +961,29 @@ func (s *server) clearExpiredLock(ctx context.Context, userID string) error {
 
 		return nil
 	})
+}
+
+func sameSessionFingerprint(session *UserSession, ipAddress, userAgent string) bool {
+	if session == nil {
+		return false
+	}
+
+	if normalizeSessionValue(session.IPAddress) != normalizeSessionValue(nilIfEmpty(ipAddress)) {
+		return false
+	}
+
+	if normalizeSessionValue(session.UserAgent) != normalizeSessionValue(nilIfEmpty(userAgent)) {
+		return false
+	}
+
+	return true
+}
+
+func normalizeSessionValue(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return strings.TrimSpace(*v)
 }
 
 func hashPassword(password string) (string, error) {
