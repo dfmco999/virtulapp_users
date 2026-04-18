@@ -18,6 +18,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"gorm.io/driver/postgres"
@@ -271,6 +272,10 @@ func (s *server) CreateUser(ctx context.Context, req *usersv1.CreateUserRequest)
 func (s *server) GetUser(ctx context.Context, req *usersv1.GetUserRequest) (*usersv1.GetUserResponse, error) {
 	if req.GetUserId() == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id required")
+	}
+
+	if err := s.touchSessionFromContext(ctx, req.GetUserId()); err != nil {
+		return nil, err
 	}
 
 	if u, ok := s.getCachedUser(ctx, req.GetUserId()); ok {
@@ -961,6 +966,52 @@ func (s *server) clearExpiredLock(ctx context.Context, userID string) error {
 
 		return nil
 	})
+}
+
+func (s *server) touchSessionFromContext(ctx context.Context, userID string) error {
+	ipAddress, userAgent, ok := sessionFingerprintFromMetadata(ctx)
+	if !ok {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	update := s.db.WithContext(ctx).
+		Model(&UserSession{}).
+		Where("user_id = ? AND revoked_at IS NULL AND expires_at > ?", userID, now).
+		Where("ip_address = ? AND user_agent = ?", ipAddress, userAgent).
+		Updates(map[string]any{
+			"last_used_at": now,
+			"expires_at":   now.Add(webSessionTTL),
+		})
+	if update.Error != nil {
+		return status.Error(codes.Internal, update.Error.Error())
+	}
+	if update.RowsAffected == 0 {
+		return status.Error(codes.Unauthenticated, "session inactive or expired")
+	}
+
+	return nil
+}
+
+func sessionFingerprintFromMetadata(ctx context.Context) (string, string, bool) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return "", "", false
+	}
+
+	ipValues := md.Get("x-session-ip")
+	uaValues := md.Get("x-session-user-agent")
+	if len(ipValues) == 0 || len(uaValues) == 0 {
+		return "", "", false
+	}
+
+	ipAddress := strings.TrimSpace(ipValues[0])
+	userAgent := strings.TrimSpace(uaValues[0])
+	if ipAddress == "" || userAgent == "" {
+		return "", "", false
+	}
+
+	return ipAddress, userAgent, true
 }
 
 func sameSessionFingerprint(session *UserSession, ipAddress, userAgent string) bool {
