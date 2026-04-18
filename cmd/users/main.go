@@ -496,12 +496,25 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 	}
 	user.Credentials = cred
 
-	if user.Status == "DELETED" || user.Status == "SUSPENDED" || user.Status == "INACTIVE" || user.Status == "LOCKED" {
+	if user.Status == "DELETED" || user.Status == "SUSPENDED" || user.Status == "INACTIVE" {
 		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"status_blocked"}`)
 		return nil, status.Error(codes.PermissionDenied, "account unavailable")
 	}
 
-	if cred.LockedUntil != nil && cred.LockedUntil.After(now) {
+	if user.Status == "LOCKED" {
+		if cred.LockedUntil != nil && cred.LockedUntil.After(now) {
+			_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"locked"}`)
+			return nil, status.Error(codes.PermissionDenied, "account locked")
+		}
+
+		if err := s.clearExpiredLock(ctx, user.ID); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+
+		user.Status = "ACTIVE"
+		cred.LockedUntil = nil
+		cred.FailedLoginCount = 0
+	} else if cred.LockedUntil != nil && cred.LockedUntil.After(now) {
 		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"locked"}`)
 		return nil, status.Error(codes.PermissionDenied, "account locked")
 	}
@@ -907,6 +920,27 @@ func (s *server) hasActiveSession(ctx context.Context, userID string, now time.T
 		return false, err
 	}
 	return count > 0, nil
+}
+
+func (s *server) clearExpiredLock(ctx context.Context, userID string) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&Credentials{}).
+			Where("user_id = ?", userID).
+			Updates(map[string]any{
+				"failed_login_count": 0,
+				"locked_until":       nil,
+			}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&User{}).
+			Where("id = ? AND status = ?", userID, "LOCKED").
+			Update("status", "ACTIVE").Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 func hashPassword(password string) (string, error) {
