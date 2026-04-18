@@ -24,7 +24,10 @@ import (
 	"gorm.io/gorm"
 )
 
-const userCacheTTL = 5 * time.Minute
+const (
+	userCacheTTL    = 5 * time.Minute
+	webSessionTTL   = 15 * time.Minute
+)
 
 type server struct {
 	usersv1.UnimplementedUsersServiceServer
@@ -588,7 +591,7 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 			RefreshTokenHash: refreshHash,
 			IPAddress:        nilIfEmpty(req.GetIpAddress()),
 			UserAgent:        nilIfEmpty(req.GetUserAgent()),
-			ExpiresAt:        now.Add(24 * time.Hour * 30),
+			ExpiresAt:        now.Add(webSessionTTL),
 			LastUsedAt:       &now,
 			CreatedAt:        now,
 		}
