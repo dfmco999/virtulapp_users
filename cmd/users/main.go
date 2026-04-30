@@ -3,12 +3,15 @@ package main
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -26,8 +29,8 @@ import (
 )
 
 const (
-	userCacheTTL    = 5 * time.Minute
-	webSessionTTL   = 15 * time.Minute
+	userCacheTTL  = 5 * time.Minute
+	webSessionTTL = 15 * time.Minute
 )
 
 type server struct {
@@ -1131,8 +1134,147 @@ func mapGormError(err error) error {
 	}
 }
 
+func getenv(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}
+
+func normalizeListenAddr(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return ":50051"
+	}
+	if strings.Contains(addr, ":") {
+		return addr
+	}
+	return ":" + addr
+}
+
+func loadDotEnv() {
+	for _, path := range dotenvCandidatePaths() {
+		if err := loadDotEnvFile(path); err == nil {
+			log.Printf("loaded env from %s", path)
+			return
+		} else if !errors.Is(err, os.ErrNotExist) {
+			log.Printf("warning: unable to load %s: %v", path, err)
+		}
+	}
+}
+
+func dotenvCandidatePaths() []string {
+	seen := make(map[string]struct{})
+	var paths []string
+	add := func(path string) {
+		if strings.TrimSpace(path) == "" {
+			return
+		}
+		clean := filepath.Clean(path)
+		if _, ok := seen[clean]; ok {
+			return
+		}
+		seen[clean] = struct{}{}
+		paths = append(paths, clean)
+	}
+
+	if wd, err := os.Getwd(); err == nil {
+		add(filepath.Join(wd, ".env"))
+		add(filepath.Join(wd, "virtulapp_users", ".env"))
+
+		dir := wd
+		for {
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			add(filepath.Join(parent, ".env"))
+			dir = parent
+		}
+	}
+
+	if exe, err := os.Executable(); err == nil {
+		add(filepath.Join(filepath.Dir(exe), ".env"))
+	}
+
+	if _, file, _, ok := runtime.Caller(0); ok {
+		add(filepath.Join(filepath.Dir(file), "..", "..", ".env"))
+	}
+
+	return paths
+}
+
+func loadDotEnvFile(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	lines := strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "export ") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "export "))
+		}
+
+		eq := strings.Index(line, "=")
+		if eq <= 0 {
+			continue
+		}
+
+		key := strings.TrimSpace(line[:eq])
+		raw := strings.TrimSpace(line[eq+1:])
+		if key == "" {
+			continue
+		}
+
+		value, next, err := parseDotEnvValue(raw, lines, i, key)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		i = next
+
+		if _, exists := os.LookupEnv(key); !exists {
+			if err := os.Setenv(key, value); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func parseDotEnvValue(raw string, lines []string, index int, key string) (string, int, error) {
+	if raw == "" {
+		return "", index, nil
+	}
+
+	quote := raw[0]
+	if quote != '"' && quote != '\'' {
+		return strings.TrimSpace(raw), index, nil
+	}
+
+	value := raw[1:]
+	for {
+		if end := strings.IndexByte(value, quote); end >= 0 {
+			return value[:end], index, nil
+		}
+
+		index++
+		if index >= len(lines) {
+			return "", index, fmt.Errorf("unterminated quoted value for %s", key)
+		}
+		value += "\n" + lines[index]
+	}
+}
+
 func main() {
-	dsn := os.Getenv("DATABASE_URL")
+	loadDotEnv()
+
+	dsn := getenv("DATABASE_URL", "")
 	if dsn == "" {
 		log.Fatal("DATABASE_URL is required")
 	}
@@ -1144,7 +1286,8 @@ func main() {
 
 	rdb := newRedisClient()
 
-	lis, err := net.Listen("tcp", ":50051")
+	grpcAddr := normalizeListenAddr(getenv("GRPC_ADDR", ":"+getenv("PORT", "50051")))
+	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Fatalf("listen: %v", err)
 	}
@@ -1155,7 +1298,7 @@ func main() {
 		redis: rdb,
 	})
 
-	log.Println("running users service on :50051")
+	log.Printf("running users service on %s", grpcAddr)
 	if err := srv.Serve(lis); err != nil {
 		log.Fatalf("grpc serve: %v", err)
 	}
