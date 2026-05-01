@@ -3,7 +3,7 @@ module github.com/dfmco999/virtulapp_users
 go 1.24.0
 
 require (
-	github.com/dfmco999/virtulapp_project v0.1.2-0.20260414034348-968ac1d3ae88
+	github.com/dfmco999/virtulapp_project v0.1.2-0.20260430023841-2d1fa61f6ef4
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.18.0
 	golang.org/x/crypto v0.46.0
