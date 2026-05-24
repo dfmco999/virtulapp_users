@@ -16,6 +16,8 @@ import (
 	"time"
 
 	usersv1 "github.com/dfmco999/virtulapp_project/gen/users/v1"
+	"github.com/dfmco999/virtulapp_project/pkg/auth"
+	"github.com/dfmco999/virtulapp_project/pkg/grpcx"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
@@ -1141,6 +1143,22 @@ func getenv(k, def string) string {
 	return def
 }
 
+func loadIATPublicKeyPEM() string {
+	if v := strings.TrimSpace(os.Getenv("IAT_PUBLIC_KEY_PEM")); v != "" {
+		return v
+	}
+
+	if path := strings.TrimSpace(os.Getenv("IAT_PUBLIC_KEY_PATH")); path != "" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			log.Fatalf("read IAT_PUBLIC_KEY_PATH: %v", err)
+		}
+		return string(b)
+	}
+
+	return "iat_public.pem"
+}
+
 func normalizeListenAddr(addr string) string {
 	addr = strings.TrimSpace(addr)
 	if addr == "" {
@@ -1287,12 +1305,17 @@ func main() {
 	rdb := newRedisClient()
 
 	grpcAddr := normalizeListenAddr(getenv("GRPC_ADDR", ":"+getenv("PORT", "50051")))
+	pub, err := auth.LoadRSAPublicKeyFromEnvOrFile(loadIATPublicKeyPEM())
+	if err != nil {
+		log.Fatalf("load iat public key: %v", err)
+	}
+
 	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
 		log.Fatalf("listen: %v", err)
 	}
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(grpc.UnaryInterceptor(grpcx.RequireIATInterceptor(pub)))
 	usersv1.RegisterUsersServiceServer(srv, &server{
 		db:    db,
 		redis: rdb,
