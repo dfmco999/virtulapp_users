@@ -106,6 +106,11 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 		return nil, status.Error(codes.Unauthenticated, "invalid credentials")
 	}
 
+	if !user.IsEmailVerified {
+		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"email_not_verified"}`)
+		return nil, status.Error(codes.PermissionDenied, "email not verified")
+	}
+
 	refreshHash := hashToken(uuid.NewString())
 
 	sessionID := uuid.NewString()
@@ -243,7 +248,10 @@ func (s *server) ValidateSession(ctx context.Context, req *usersv1.ValidateSessi
 		if err := tx.Select("id", "tenant_id", "status").First(&user, "id = ?", userID).Error; err != nil {
 			return err
 		}
-		if user.Status != "ACTIVE" || (principal.TenantID != "" && principal.TenantID != user.TenantID) {
+		// The active tenant may differ from the identity tenant when the user has
+		// memberships in several companies. Edge only issues that context after
+		// Licences validates the membership.
+		if user.Status != "ACTIVE" {
 			return errSessionInactive
 		}
 
