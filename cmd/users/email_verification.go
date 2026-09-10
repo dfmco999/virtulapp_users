@@ -19,8 +19,17 @@ import (
 
 func (s *server) RequestEmailVerification(ctx context.Context, req *usersv1.RequestEmailVerificationRequest) (*usersv1.RequestEmailVerificationResponse, error) {
 	userID := strings.TrimSpace(req.GetUserId())
+	email := strings.ToLower(strings.TrimSpace(req.GetEmail()))
 	var user User
-	if userID == "" || s.db.WithContext(ctx).Where("id = ? AND deleted_at IS NULL", userID).First(&user).Error != nil {
+	query := s.db.WithContext(ctx).Where("deleted_at IS NULL")
+	if userID != "" {
+		query = query.Where("id = ?", userID)
+	} else if email != "" {
+		query = query.Where("email_normalized = ?", email)
+	} else {
+		return nil, status.Error(codes.InvalidArgument, "user_id or email required")
+	}
+	if query.First(&user).Error != nil {
 		return nil, status.Error(codes.NotFound, "user not found")
 	}
 	if user.IsEmailVerified {
