@@ -51,15 +51,20 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 	}
 	user.Credentials = cred
 
-	if user.Status == "DELETED" || user.Status == "SUSPENDED" || user.Status == "INACTIVE" {
-		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"status_blocked"}`)
-		return nil, status.Error(codes.PermissionDenied, "account unavailable")
-	}
-
-	if user.Status == "LOCKED" {
+	// Allow-list, not a block-list: only ACTIVE (and LOCKED, if the lock has
+	// since expired) may proceed. Any other status - the known ones below, or
+	// anything unrecognized (a future status, a typo, bad data) - is denied by
+	// default instead of silently falling through to a successful login.
+	switch user.Status {
+	case "ACTIVE":
 		if cred.LockedUntil != nil && cred.LockedUntil.After(now) {
 			_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"locked"}`)
-			return nil, status.Error(codes.PermissionDenied, "account locked")
+			return nil, status.Error(codes.PermissionDenied, "account_locked")
+		}
+	case "LOCKED":
+		if cred.LockedUntil != nil && cred.LockedUntil.After(now) {
+			_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"locked"}`)
+			return nil, status.Error(codes.PermissionDenied, "account_locked")
 		}
 
 		if err := s.clearExpiredLock(ctx, user.ID); err != nil {
@@ -69,9 +74,18 @@ func (s *server) Login(ctx context.Context, req *usersv1.LoginRequest) (*usersv1
 		user.Status = "ACTIVE"
 		cred.LockedUntil = nil
 		cred.FailedLoginCount = 0
-	} else if cred.LockedUntil != nil && cred.LockedUntil.After(now) {
-		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"locked"}`)
-		return nil, status.Error(codes.PermissionDenied, "account locked")
+	case "DELETED":
+		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"status_blocked","status":"DELETED"}`)
+		return nil, status.Error(codes.PermissionDenied, "account_deleted")
+	case "SUSPENDED":
+		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"status_blocked","status":"SUSPENDED"}`)
+		return nil, status.Error(codes.PermissionDenied, "account_suspended")
+	case "INACTIVE":
+		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"status_blocked","status":"INACTIVE"}`)
+		return nil, status.Error(codes.PermissionDenied, "account_inactive")
+	default:
+		_ = s.createAudit(ctx, &user.ID, "LOGIN_DENIED", "DENY", `{"reason":"status_blocked","status":"UNKNOWN"}`)
+		return nil, status.Error(codes.PermissionDenied, "account_unavailable")
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(req.GetPassword())); err != nil {
